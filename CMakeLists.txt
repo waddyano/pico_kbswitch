@@ -1,17 +1,18 @@
 cmake_minimum_required(VERSION 3.13)
 #set(PICO_SDK_PATH /Users/brendenadamczak/Documents/pico-sdk)
 include (pico_sdk_import.cmake)
-project(USB_DEVICE_AND_KEYBOARD)
+project(pico_kbswitch)
 
 pico_sdk_init()
 
 add_subdirectory("./Pico-PIO-USB" pico_pio_usb)
 
-set(target_name USB_DEVICE_AND_KEYBOARD)
+set(target_name pico_kbswitch)
 add_executable(${target_name})
 target_sources(${target_name} PRIVATE
- main_device.c
- main_host.c
+ main_device.cxx
+ main_host.cxx
+ uart_messages.cxx
  usb_descriptors.c
  # can use 'tinyusb_pico_pio_usb' library later when pico-sdk is updated
  ${PICO_TINYUSB_PATH}/src/portable/raspberrypi/pio_usb/dcd_pio_usb.c
@@ -23,7 +24,7 @@ target_sources(${target_name} PRIVATE
 
  # print memory usage, enable all warnings
 target_link_options(${target_name} PRIVATE -Xlinker --print-memory-usage)
-target_compile_options(${target_name} PRIVATE ) #-Wall -Wextra
+target_compile_options(${target_name} PRIVATE -DPIO_USB_DP_PIN_DEFAULT=2 ) #-Wall -Wextra
 
 # use tinyusb implementation
 target_compile_definitions(${target_name} PRIVATE PIO_USB_USE_TINYUSB)

@@ -8,5 +8,16 @@ extern uint8_t keyboard_dev_addr;
 extern uint8_t mouse_dev_addr;
 extern uint8_t keyboard_instance;
 extern uint8_t mouse_instance;
+extern uint8_t board_number;
+extern uint8_t current_output_mask;
 
-extern void print_kbd_report(hid_keyboard_report_t *report);
+extern bool do_connect;
+extern bool do_disconnect;
+
+extern bool should_output();
+extern void toggle_output();
+extern void set_led(bool on);
+
+extern void print_kbd_report(const hid_keyboard_report_t *report);
+extern void print_mouse_report(const hid_mouse_report_t *report);
+extern void check_kbd_report(const hid_keyboard_report_t *report);

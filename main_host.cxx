@@ -50,6 +50,10 @@ uint8_t mouse_dev_addr = NO_DEV;
 uint8_t keyboard_instance;
 uint8_t mouse_instance;
 
+bool connected = true;
+bool do_connect = false;
+bool do_disconnect = false;
+
 #define PIO_USB_CONFIG                                                 \
   {                                                                            \
     PIO_USB_DP_PIN_DEFAULT, PIO_USB_TX_DEFAULT, PIO_SM_USB_TX_DEFAULT,         \
@@ -57,6 +61,12 @@ uint8_t mouse_instance;
         PIO_SM_USB_EOP_DEFAULT, NULL, PIO_USB_DEBUG_PIN_NONE,                  \
         PIO_USB_DEBUG_PIN_NONE                                                 \
   }
+
+const int SEND_TO_HOST = 1;
+const int SEND_TO_UART = 2;
+
+int destination = SEND_TO_HOST | SEND_TO_UART;
+
 
 // core1: handle host events
 void core1_main() {
@@ -98,11 +108,13 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
   {
     keyboard_dev_addr = dev_addr;
     keyboard_instance = instance;
+    send_uart_keyboard_connected(true);
   }
   else if (itf_protocol == HID_ITF_PROTOCOL_MOUSE)
   {
     mouse_dev_addr = dev_addr;
     mouse_instance = instance;
+    send_uart_mouse_connected(true);
   }
 
   uint16_t vid, pid;
@@ -155,10 +167,12 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
   if (dev_addr == keyboard_dev_addr)
   {
     keyboard_dev_addr = NO_DEV;
+    send_uart_keyboard_connected(false);
   }
   else if (dev_addr == mouse_dev_addr)
   {
     mouse_dev_addr = NO_DEV;
+    send_uart_mouse_connected(false);
   }
 
   printf("[%u] HID Interface%u is unmounted\r\n", dev_addr, instance);
@@ -175,14 +189,46 @@ static inline bool find_key_in_report(hid_keyboard_report_t const *report, uint8
   return false;
 }
 
-bool connected = true;
-bool do_connect = false;
-bool do_disconnect = false;
-
-static hid_keyboard_report_t prev_report = { 0, 0, {0} }; // previous report to check key released
+void check_kbd_report(const hid_keyboard_report_t *report)
+{
+  static hid_keyboard_report_t prev_report = { 0, 0, {0} }; // previous report to check key state changed
+  uint8_t keycode = report->keycode[0];
+  uint8_t prev_keycode = prev_report.keycode[0];
+  printf("check keycode %u %u %u\n", keycode, prev_keycode, HID_KEY_F12);
+  if (prev_keycode != keycode)
+  {
+    if (keycode == 0 && prev_keycode == HID_KEY_F12)
+    {
+      prev_keycode = 0;
+      printf("toggle output curr %u\n", current_output_mask);
+      if (current_output_mask == 1)
+      {
+        current_output_mask = 2;
+      }
+      else if (current_output_mask == 2)
+      {
+        current_output_mask = 1;
+      }
+      send_uart_set_output_mask(current_output_mask);
+#if 0
+      connected = !connected;
+      printf("toggle %d\n", !connected);
+      if (!connected)
+      {
+        do_disconnect = true;
+      }
+      else
+      {
+        do_connect = true;
+      }
+#endif          
+    }
+  }
+  prev_report = *report;
+}
 
 // convert hid keycode to ascii and print via usb device CDC (ignore non-printable)
-void print_kbd_report(hid_keyboard_report_t *report)
+void print_kbd_report(const hid_keyboard_report_t *report)
 {
   char buf[64];
   int pos = 0;
@@ -201,31 +247,6 @@ void print_kbd_report(hid_keyboard_report_t *report)
   {
     uint8_t keycode = report->keycode[i];
     pos += snprintf(buf + pos, 6, "[%02x] ", keycode & 0xff);
-    if (i == 0)
-    {
-      uint8_t prev_keycode = prev_report.keycode[0];
-      if (prev_keycode != keycode)
-      {
-        if (keycode == 0 && prev_keycode == HID_KEY_F12)
-        {
-          prev_keycode = 0;
-          connected = !connected;
-          printf("toggle %d\n", !connected);
-          if (!connected)
-          {
-            do_disconnect = true;
-          }
-          else
-          {
-            do_connect = true;
-          }
-        }
-        else if (keycode == HID_KEY_F12)
-        {
-          prev_keycode = keycode;
-        }
-      }
-    }
     if ( keycode )
     {
       uint8_t ch = keycode2ascii[keycode][is_shift ? 1 : 0];
@@ -252,37 +273,57 @@ static void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t *report)
 
   if (connected)
   {
-    tud_hid_keyboard_report(REPORT_ID_KEYBOARD, report->modifier, report->keycode);
-    send_uart_kb_report(report);
+    if (should_output())
+    {
+      tud_hid_keyboard_report(REPORT_ID_KEYBOARD, report->modifier, report->keycode);
+    }
+
+    if ((destination & SEND_TO_UART) != 0)
+    {
+      send_uart_kb_report(report);
+    }
   }
   else
   {
     printf("not connected\n");
   }
   
+  check_kbd_report(report);
   print_kbd_report(report);
-  //tud_cdc_write(buf, strlen(buf));
-  //tud_cdc_write("\r\n", 2);
-  //tud_cdc_write_flush();
-
-  prev_report = *report;
 }
 
-// send mouse report to usb device CDC
-static void process_mouse_report(uint8_t dev_addr, hid_mouse_report_t const * report)
+void print_mouse_report(const hid_mouse_report_t *report)
 {
-  tud_hid_mouse_report(REPORT_ID_MOUSE, report->buttons, report->x, report->y, report->wheel, report->pan);
-
   //------------- button state  -------------//
   //uint8_t button_changed_mask = report->buttons ^ prev_report.buttons;
   char l = report->buttons & MOUSE_BUTTON_LEFT   ? 'L' : '-';
   char m = report->buttons & MOUSE_BUTTON_MIDDLE ? 'M' : '-';
   char r = report->buttons & MOUSE_BUTTON_RIGHT  ? 'R' : '-';
 
-  printf("[%u] %c%c%c %d %d %d %d\n", dev_addr, l, m, r, report->x, report->y, report->wheel, report->pan);
+  printf("%c%c%c %d %d %d %d\n", l, m, r, report->x, report->y, report->wheel, report->pan);
+}
 
-  //tud_cdc_write(tempbuf, count);
-  //tud_cdc_write_flush();
+// send mouse report to usb device CDC
+static void process_mouse_report(uint8_t /*dev_addr*/, hid_mouse_report_t const * report)
+{
+  if (connected)
+  {
+    if (should_output())
+    {
+      tud_hid_mouse_report(REPORT_ID_MOUSE, report->buttons, report->x, report->y, report->wheel, report->pan);
+    }
+
+    if ((destination & SEND_TO_UART) != 0)
+    {
+      send_uart_mouse_report(report);
+    }
+  }
+  else
+  {
+    printf("not connected\n");
+  }
+
+  print_mouse_report(report);
 }
 
 // Invoked when received report from device via interrupt endpoint
@@ -291,6 +332,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
   (void) len;
   uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
 
+  printf("got report %d\n", itf_protocol);
   switch(itf_protocol)
   {
     case HID_ITF_PROTOCOL_KEYBOARD:

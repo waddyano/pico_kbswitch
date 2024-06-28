@@ -13,7 +13,7 @@ target_sources(${target_name} PRIVATE
  main_device.cxx
  main_host.cxx
  uart_messages.cxx
- usb_descriptors.c
+ usb_descriptors.cxx
  # can use 'tinyusb_pico_pio_usb' library later when pico-sdk is updated
  ${PICO_TINYUSB_PATH}/src/portable/raspberrypi/pio_usb/dcd_pio_usb.c
  ${PICO_TINYUSB_PATH}/src/portable/raspberrypi/pio_usb/hcd_pio_usb.c

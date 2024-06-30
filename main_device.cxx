@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "hardware/pwm.h"
 #include "pico/stdio_uart.h"
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
@@ -92,8 +93,13 @@ static void init_gpio()
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
 
-  gpio_init(LED2_PIN);
-  gpio_set_dir(LED2_PIN, GPIO_OUT);
+  //gpio_init(LED2_PIN);
+  //gpio_set_dir(LED2_PIN, GPIO_OUT);
+  gpio_set_function(LED2_PIN, GPIO_FUNC_PWM);
+  uint slice_num = pwm_gpio_to_slice_num(LED2_PIN);
+  pwm_config config = pwm_get_default_config();
+  pwm_config_set_clkdiv(&config, 4.f);
+  pwm_init(slice_num, &config, true);
 
   gpio_init(SENSE_PIN);
   gpio_set_dir(SENSE_PIN, GPIO_IN);
@@ -107,7 +113,8 @@ static void init_gpio()
 
 void set_led(bool on)
 {
-  gpio_put(LED2_PIN, on);
+  //gpio_put(LED2_PIN, on);
+  pwm_set_gpio_level(LED2_PIN, on ? 10000 : 0);
 }
 
 uint8_t board_number = 0;
@@ -230,9 +237,9 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
   printf("report itf %d kda %d kitf %d id %d type %d size %d buf %x\n", keyboard_dev_addr, keyboard_instance, instance, report_id, report_type, bufsize, bufsize > 0 ? buffer[0] : 0);
   if (keyboard_instance == instance && report_type == HID_REPORT_TYPE_OUTPUT && bufsize > 0)
   {
-    printf("send leds\n");
     static uint8_t leds;
     leds = buffer[0];
+    printf("send leds %x\n", leds);
     if (keyboard_dev_addr != NO_DEV)
     {
       tuh_hid_set_report(keyboard_dev_addr, keyboard_instance, 0, HID_REPORT_TYPE_OUTPUT, &leds, sizeof(leds));

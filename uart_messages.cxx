@@ -253,9 +253,9 @@ static void process_pkt(const uint8_t *pbuf, int plen)
       printf(" bad kb report crc %x\n", c);
       return;
     }
-    printf("got kb report via uart\n");
     static uint8_t leds;
     leds = pbuf[1];
+    printf("got kb report %d via uart\n", leds);
     if (keyboard_dev_addr != NO_DEV)
     {
       tuh_hid_set_report(keyboard_dev_addr, keyboard_instance, 0, HID_REPORT_TYPE_OUTPUT, &leds, sizeof(leds));

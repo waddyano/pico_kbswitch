@@ -192,36 +192,48 @@ static inline bool find_key_in_report(hid_keyboard_report_t const *report, uint8
 void check_kbd_report(const hid_keyboard_report_t *report)
 {
   static hid_keyboard_report_t prev_report = { 0, 0, {0} }; // previous report to check key state changed
+  static int key_count = 0;
+  static uint64_t key_time;
   uint8_t keycode = report->keycode[0];
   uint8_t prev_keycode = prev_report.keycode[0];
-  printf("check keycode %u %u %u\n", keycode, prev_keycode, HID_KEY_F12);
+  printf("check keycode %u %u %u\n", keycode, prev_keycode, HID_KEY_SCROLL_LOCK);
   if (prev_keycode != keycode)
   {
-    if (keycode == 0 && prev_keycode == HID_KEY_F12)
+    if (keycode == 0)
     {
-      prev_keycode = 0;
-      printf("toggle output curr %u\n", current_output_mask);
-      if (current_output_mask == 1)
+      if (prev_keycode == HID_KEY_SCROLL_LOCK)
       {
-        current_output_mask = 2;
-      }
-      else if (current_output_mask == 2)
-      {
-        current_output_mask = 1;
-      }
-      send_uart_set_output_mask(current_output_mask);
+        prev_keycode = 0;
+        key_count++;
+        if (key_count == 1)
+        {
+          key_time = time_us_64();
+        }
+        else if (key_count == 2)
+        {
+          if (time_us_64() - key_time < 1000000)
+          {
+            toggle_output();
+          }
+          key_count = 0;
+        }
 #if 0
-      connected = !connected;
-      printf("toggle %d\n", !connected);
-      if (!connected)
-      {
-        do_disconnect = true;
-      }
-      else
-      {
-        do_connect = true;
-      }
+        connected = !connected;
+        printf("toggle %d\n", !connected);
+        if (!connected)
+        {
+          do_disconnect = true;
+        }
+        else
+        {
+          do_connect = true;
+        }
 #endif          
+      }
+      else if (prev_keycode != 0)
+      {
+        key_count = 0;
+      }
     }
   }
   prev_report = *report;

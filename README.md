@@ -1,6 +1,7 @@
-# Propose 
+# Pico KB Switch
 
-This is a example showing how to use the Pico-PIO-USB library
+This is firmware for creating a keyboard and mouse switch using two raspberry pi Picos.
+The original starting point was 
 
 
 ## links
@@ -9,18 +10,3 @@ This is a example showing how to use the Pico-PIO-USB library
 * [USB device](https://github.com/hathach/tinyusb/tree/master/examples/device/hid_composite)
 
 
-# program board
-
-```bash
-mkdir build
-cd build
-git submodule init
-git submodule pull
-make -j8
-openocd -f interface/cmsis-dap.cfg -c "adapter speed 5000" -f target/rp2040.cfg -c "program USB_DEVICE_AND_KEYBOARD.elf verify reset exit"
-```
-
-# mac
-ls /dev/tty.usb*
-
-screen /dev/tty.usbmodem1234567890121

@@ -45,7 +45,7 @@ static void read_pending()
     uint8_t ch = uart_getc(UART_ID);
     if (rx_wptr == wlimit)
     {
-      printf("oh dear\n");
+      printf("oh dear buffer collision\n");
       break;
     }
     rx_buf[rx_wptr++] = ch;
@@ -194,15 +194,36 @@ void send_uart_set_output_mask(uint8_t mask)
   b.send();
 }
 
+static void print_pkt(const uint8_t *pbuf, int plen)
+{
+  printf("len=%d:", plen);
+  for (int i = 0; i < plen; ++i)
+  {
+    printf(" %02x", pbuf[i]);
+  }
+  printf("\n");
+}
+
 static void process_pkt(const uint8_t *pbuf, int plen)
 {
   //printf("got packet type %d, len %d\n", pbuf[0], plen);
+  if (plen == 0)
+  {
+    printf("empty packet\n");
+    return;
+  }
   if (pbuf[0] == MessageType::KEYBOARD)
   {
+    if (plen != 9)
+    {
+      printf("invalid kb packet %d\n", plen);
+      return;
+    }
     uint8_t c = CRC8::CRC8::calc(pbuf, plen - 1);
     if (c != pbuf[8])
     {
-      printf(" bad kb crc %x\n", c);
+      printf("bad kb crc %x != %x ptrs %d %d\n", c, pbuf[8], rx_rptr, rx_wptr);
+      print_pkt(pbuf, plen);
       return;
     }
     hid_keyboard_report_t report;
@@ -223,10 +244,16 @@ static void process_pkt(const uint8_t *pbuf, int plen)
   }
   else if (pbuf[0] == MessageType::MOUSE)
   {
+    if (plen != 7)
+    {
+      printf("invalid mouse packet %d\n", plen);
+      return;
+    }
     uint8_t c = CRC8::CRC8::calc(pbuf, plen - 1);
     if (c != pbuf[6])
     {
-      printf(" bad mouse crc %x\n", c);
+      printf("bad mouse crc %x %d %d\n", c, rx_rptr, rx_wptr);
+      print_pkt(pbuf, plen);
       return;
     }
     hid_mouse_report_t report;
@@ -247,11 +274,16 @@ static void process_pkt(const uint8_t *pbuf, int plen)
   }
   else if (pbuf[0] == MessageType::KEYBOARD_REPORT)
   {
+    if (plen != 3)
+    {
+      printf("invalid kb report packet %d\n", plen);
+      return;
+    }
     uint8_t c = CRC8::CRC8::calc(pbuf, plen - 1);
     if (c != pbuf[2])
     {
       printf(" bad kb report crc %x\n", c);
-      return;
+      return;;
     }
     static uint8_t leds;
     leds = pbuf[1];
@@ -263,6 +295,11 @@ static void process_pkt(const uint8_t *pbuf, int plen)
   }
   else if (pbuf[0] == MessageType::CONNECTION_CHANGED)
   {
+    if (plen != 3)
+    {
+      printf("invalid conn changed packet %d\n", plen);
+      return;
+    }
     uint8_t c = CRC8::CRC8::calc(pbuf, plen - 1);
     if (c != pbuf[2])
     {
@@ -273,6 +310,11 @@ static void process_pkt(const uint8_t *pbuf, int plen)
   }
   else if (pbuf[0] == MessageType::SET_OUTPUT_MASK)
   {
+    if (plen != 3)
+    {
+      printf("invalid output mask packet %d\n", plen);
+      return;
+    }
     uint8_t c = CRC8::CRC8::calc(pbuf, plen - 1);
     if (c != pbuf[2])
     {

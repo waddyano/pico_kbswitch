@@ -29,11 +29,13 @@
 // For TinyUSB roothub port0 is native usb controller, roothub port1 is
 // pico-pio-usb.
 
+#include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "hardware/pwm.h"
+#include "hardware/watchdog.h"
 #include "pico/stdio_uart.h"
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
@@ -172,6 +174,12 @@ int main(void) {
   bool led_on = true;
   gpio_put(LED_PIN, led_on);
   int flash_count = 15;
+  if (watchdog_enable_caused_reboot())
+  {
+    flash_count = INT_MAX;
+    printf("watchdog cuased reboot\n");
+  }
+  watchdog_enable(100, 0);
 
   bool debouncing = false;
   while (true) {
@@ -209,6 +217,7 @@ int main(void) {
       add_alarm_in_ms(40, click_timer_callback, &debouncing, false);
       toggle_output();
     }
+    watchdog_update();
   }
 
   return 0;

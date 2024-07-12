@@ -119,21 +119,34 @@ void set_led(bool on)
   pwm_set_gpio_level(LED2_PIN, on ? 10000 : 0);
 }
 
-uint8_t board_number = 0;
-uint8_t current_output_mask = 1; // board zero is the default
+static uint8_t board_number = 0; // set once at startup
+static uint8_t current_output_mask = 1; // board zero is the default
+
+// save current_output_mask so if watchdog triggers it can be restored
+static void update_watchdog_state()
+{
+  watchdog_hw->scratch[3] = current_output_mask;
+}
+
+void set_current_output_mask(u_int8_t val)
+{
+  current_output_mask = val;
+  update_watchdog_state();
+}
 
 void toggle_output()
 {
-    printf("toggle output curr %u\n", current_output_mask);
-    if (current_output_mask == 1)
-    {
-      current_output_mask = 2;
-    }
-    else if (current_output_mask == 2)
-    {
-      current_output_mask = 1;
-    }
-    send_uart_set_output_mask(current_output_mask);
+  printf("toggle output curr %u\n", current_output_mask);
+  if (current_output_mask == 1)
+  {
+    current_output_mask = 2;
+  }
+  else if (current_output_mask == 2)
+  {
+    current_output_mask = 1;
+  }
+  update_watchdog_state();
+  send_uart_set_output_mask(current_output_mask);
 }
 
 bool should_output()
@@ -153,14 +166,6 @@ int main(void) {
   if (!gpio_get(SENSE_PIN))
     board_number = 1;
 
-#if 0
-  for (int i = 0; i < 5; ++i)
-  {
-    sleep_ms(1000);
-    printf("tick %d b %d\n", i, board_number);
-  }
-  #endif
-
   init_uart();
 
   multicore_reset_core1();
@@ -176,9 +181,11 @@ int main(void) {
   int flash_count = 15;
   if (watchdog_enable_caused_reboot())
   {
-    flash_count = INT_MAX;
-    printf("watchdog cuased reboot\n");
+    flash_count = 36000; // about two hours
+    current_output_mask = watchdog_hw->scratch[3];
+    printf("watchdog caused reboot mask %d\n", current_output_mask);
   }
+
   watchdog_enable(100, 0);
 
   bool debouncing = false;

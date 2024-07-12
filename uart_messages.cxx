@@ -322,7 +322,7 @@ static void process_pkt(const uint8_t *pbuf, int plen)
       return;
     }
     printf("got set output mask %u via uart\n", pbuf[1]);
-    current_output_mask = pbuf[1];
+    set_current_output_mask(pbuf[1]);
   }
   else
   {

@@ -274,6 +274,7 @@ void print_kbd_report(const hid_keyboard_report_t *report)
       }
     }
   }
+  buf[pos] = '\0';
 
   printf("%s\n", buf);
 }
@@ -312,7 +313,7 @@ void print_mouse_report(const hid_mouse_report_t *report)
   char m = report->buttons & MOUSE_BUTTON_MIDDLE ? 'M' : '-';
   char r = report->buttons & MOUSE_BUTTON_RIGHT  ? 'R' : '-';
 
-  printf("%c%c%c %d %d %d %d\n", l, m, r, report->x, report->y, report->wheel, report->pan);
+  printf("%c%c%c %d %d %d %d    \r", l, m, r, report->x, report->y, report->wheel, report->pan);
 }
 
 // send mouse report to usb device CDC

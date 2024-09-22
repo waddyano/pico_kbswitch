@@ -81,10 +81,10 @@ static void gpio_callback(uint gpio, uint32_t events)
   }
 }
 
-static int64_t click_timer_callback(alarm_id_t, void *p)
+static int64_t click_timer_callback(alarm_id_t id, void *p)
 {
   bool *debouncing = static_cast<bool *>(p);
-  //printf("clear click\n");
+  printf("tick click %ld\n", id);
   *debouncing = false;
   click_state = 0;
   return 0;
@@ -183,15 +183,19 @@ int main(void) {
   {
     flash_count = 36000; // about two hours
     current_output_mask = watchdog_hw->scratch[3];
-    printf("watchdog caused reboot mask %d\n", current_output_mask);
+    int step = watchdog_hw->scratch[2];
+    printf("watchdog caused reboot at step %d mask %d\n", step, current_output_mask);
   }
 
   watchdog_enable(100, 0);
 
   bool debouncing = false;
   while (true) {
+    watchdog_hw->scratch[2] = 1;
     tud_task(); // tinyusb device task
+    watchdog_hw->scratch[2] = 2;
     tud_cdc_write_flush();
+    watchdog_hw->scratch[2] = 3;
     uart_task();
     if (do_disconnect)
     {
@@ -205,6 +209,7 @@ int main(void) {
       printf("do connect\n");
       tud_connect();
     }
+    watchdog_hw->scratch[2] = 4;
     set_led(should_output());
     if (flash_count > 0)
     {
@@ -217,14 +222,18 @@ int main(void) {
         led_last_change = tick;
       }
     }
+    watchdog_hw->scratch[2] = 5;
     if (click_state == 2 && !debouncing)
     {
-      printf("process click\n");
+      printf("process click %lld ms\n", time_us_64() / 1000ll);
       debouncing = true;
-      add_alarm_in_ms(40, click_timer_callback, &debouncing, false);
+      auto id = add_alarm_in_ms(500, click_timer_callback, &debouncing, false);
+      printf("alarm id %ld\n", id);
       toggle_output();
     }
+    watchdog_hw->scratch[2] = 6;
     watchdog_update();
+    watchdog_hw->scratch[2] = 7;
   }
 
   return 0;
